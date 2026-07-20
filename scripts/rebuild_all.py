@@ -28,6 +28,8 @@ STEPS = [
      [sys.executable, "quickstart_japan.py"], None),
     ("日本: 域際収支 (県民経済計算 Excel)",
      [sys.executable, "convert_excel.py", "kenmin", KENMIN_FILE], KENMIN_FILE),
+    ("日本: 産業構成 (県民経済計算 Excel)",
+     [sys.executable, "convert_excel.py", "industries", "syuyo1.xlsx"], "syuyo1.xlsx"),
     ("日本: 財政移転 (e-Stat API)",
      [sys.executable, "fetch_fiscal.py"], None),
     ("日本: 通話発信量 (同梱データ)",

@@ -319,6 +319,78 @@ def cmd_item(args):
              "--sheet の指定をご確認ください。")
 
 
+# ---------------------------------------------------------------- industries
+EXCLUDE_COLS = ["総生産", "合計", "小計", "輸入品", "補助金", "不突合",
+                "開差", "統計上", "都道府県", "参考", "年度", "単位"]
+
+
+def cmd_industries(args):
+    """経済活動別県内総生産 (syuyo1.xlsx) の全産業列を属性 industry として取り込む。
+    年度ごとのシート (行=都道府県, 列=産業) を想定。"""
+    if not os.path.exists(PREF_OUT):
+        sys.exit(f"{PREF_OUT} がありません。先に quickstart_japan.py を実行してください。")
+    with open(PREF_OUT, encoding="utf-8") as fp:
+        pref_data = json.load(fp)
+    targets = set(args.years or pref_data.get("meta", {}).get("years", []))
+    print(f"取り込み対象の年度: {sorted(targets)}")
+
+    total_hit, used_years, industries_seen = 0, set(), []
+    for name, grid in load_sheets(args.file, args.sheet):
+        y = parse_year(name)
+        if y is None or y not in targets:
+            continue
+        label_col, row_map = find_pref_line(grid, "col")
+        if label_col is None:
+            continue
+        first_pref_row = min(row_map)
+        # 産業名が最も多く並ぶヘッダ行を特定
+        best = None
+        for r in range(first_pref_row):
+            cols = {}
+            for c, cell in enumerate(grid[r]):
+                n = str(cell or "").strip()
+                if (n and c != label_col and len(n) >= 2
+                        and not any(k in n for k in EXCLUDE_COLS)
+                        and parse_year(n) is None and to_num(n) is None):
+                    cols[c] = n
+            if len(cols) >= 5 and (best is None or len(cols) > len(best)):
+                best = cols
+        if not best:
+            continue
+        industries_seen = list(best.values())
+        print(f"シート「{name}」: {len(best)} 産業を検出")
+        for r, code in row_map.items():
+            slot = pref_data["prefs"][str(code)]["years"].setdefault(y, {})
+            ind = slot.setdefault("attrs", {}).setdefault("industry", {})
+            for c, iname in best.items():
+                v = to_num(grid[r][c] if c < len(grid[r]) else None)
+                if v is not None:
+                    ind[iname] = round(v * args.scale, 3)
+                    total_hit += 1
+        used_years.add(y)
+
+    if not used_years:
+        sys.exit("対象年度のシートから産業列を検出できませんでした。--sheet や "
+                 "--years をご確認ください。")
+    meta = pref_data["meta"]
+    meta.setdefault("attr_units", {})["industry"] = "兆円/年度"
+    meta.setdefault("attr_titles", {})["industry"] = "産業別 県内総生産"
+    note = meta.get("note", "")
+    if "産業別" not in note:
+        meta["note"] = note + "。産業別は経済活動別県内総生産 (年度)"
+    with open(PREF_OUT, "w", encoding="utf-8") as fp:
+        json.dump(pref_data, fp, ensure_ascii=False, indent=1)
+    missing = sorted(targets - used_years)
+    print(f"→ {total_hit} 件を取り込み (年度: {sorted(used_years)})")
+    if missing:
+        print(f"※ Excel に無かった年: {missing}")
+    print(f"産業一覧: {' / '.join(industries_seen[:8])} ...")
+    tokyo = pref_data["prefs"]["13"]["years"].get(sorted(used_years)[-1], {})         .get("attrs", {}).get("industry", {})
+    top = sorted(tokyo.items(), key=lambda x: -x[1])[:3]
+    print("東京の上位産業 (妥当性確認用):",
+          " / ".join(f"{k} {v:.1f}兆円" for k, v in top))
+
+
 def main():
     p = argparse.ArgumentParser(description="公式 Excel → 消費アトラス用データ変換")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -355,6 +427,11 @@ def main():
     i.add_argument("--short", required=True, help="ボタン用の短い名前")
     i.add_argument("--unit", default="兆円/年度")
     i.set_defaults(func=cmd_item)
+
+    d = sub.add_parser("industries",
+                       help="経済活動別県内総生産の全産業を属性として統合 (syuyo1.xlsx)")
+    add_item_args(d)
+    d.set_defaults(func=cmd_industries)
 
     args = p.parse_args()
     args.func(args)

@@ -16,7 +16,12 @@ const METRICS = {
   broadband:     { label:"情報回線 (FTTH契約数)", unit:"万契約", fmt:v=>d3.format(",.0f")(v) },
   calls:         { label:"通話発信量 (携帯電話)", unit:"億回/年", fmt:v=>v.toFixed(1) }
 };
-const ATTR_TITLES = { age:"世帯主の年齢階級", income:"年収階級", household:"世帯類型" };
+const ATTR_TITLES = { age:"世帯主の年齢階級", income:"年収階級",
+                      household:"世帯類型", industry:"産業" };
+let ATTR_UNITS = {}, ATTR_FULL_TITLES = {};
+function attrUnit(k){ return ATTR_UNITS[k] || ATTR_UNIT; }
+function attrTitle(k){ return ATTR_FULL_TITLES[k] ||
+  (ATTR_TITLES[k] ? ATTR_TITLES[k]+"別 消費支出" : k); }
 let ATTR_UNIT = "万円/年";
 
 /* 藍の連続スケールと、比較用の朱⇄藍ダイバージングスケール */
@@ -66,10 +71,12 @@ function viewMeta(){
   const v = state.view;
   if(v.type==="metric") return METRICS[v.key];
   const attr = ATTR_TITLES[v.attr]||v.attr;
+  const u = attrUnit(v.attr);
+  const digits = u.startsWith("兆") ? 2 : 0;
   if(v.type==="attr")
-    return { label:`${attr}「${v.cat}」の1人当たり消費`, unit:ATTR_UNIT, fmt:x=>x.toFixed(0) };
-  return { label:`${attr}の差「${v.catA}」−「${v.catB}」`, unit:ATTR_UNIT,
-           fmt:x=>(x>0?"+":"")+x.toFixed(0) };
+    return { label:`${attr}「${v.cat}」`, unit:u, fmt:x=>x.toFixed(digits) };
+  return { label:`${attr}の差「${v.catA}」−「${v.catB}」`, unit:u,
+           fmt:x=>(x>0?"+":"")+x.toFixed(digits) };
 }
 
 function yearsWithData(){
@@ -231,10 +238,13 @@ function renderDetail(){
   }).join("");
 
   for(const [attrKey, breakdown] of Object.entries(s.attrs||{})){
-    const entries = sortCats(Object.keys(breakdown)).map(k=>[k, breakdown[k]]);
+    let entries = sortCats(Object.keys(breakdown)).map(k=>[k, breakdown[k]]);
+    if(!Object.keys(breakdown).some(c=>catSortKey(c)<1e9))
+      entries = entries.sort((a,b)=>b[1]-a[1]);   // 産業などは値の大きい順
     const max = d3.max(entries, e=>e[1]);
+    const dg = attrUnit(attrKey).startsWith("兆") ? 1 : 0;
     html += `<div class="attr-block">
-      <h3>${ATTR_TITLES[attrKey]||attrKey}別 1人当たり消費 (${ATTR_UNIT})</h3>
+      <h3>${attrTitle(attrKey)} (${attrUnit(attrKey)})</h3>
       ${entries.map(([label,val])=>{
         const isA = (v.type==="attr" && v.attr===attrKey && v.cat===label)
                  || (v.type==="diff" && v.attr===attrKey && v.catA===label);
@@ -291,6 +301,7 @@ function catSortKey(name){
   return n;
 }
 function sortCats(cats){
+  if(!cats.some(c=>catSortKey(c)<1e9)) return cats.slice();  // 産業名などは元の順序
   return cats.slice().sort((x,y)=>
     catSortKey(x)-catSortKey(y) || String(x).localeCompare(String(y),"ja"));
 }
@@ -390,6 +401,8 @@ function applyMetricOverrides(){
     if(o.digits!=null) METRICS[k].fmt = v=>v.toFixed(o.digits);
   }
   if(state.data.meta?.attr_unit) ATTR_UNIT = state.data.meta.attr_unit;
+  ATTR_UNITS = state.data.meta?.attr_units || {};
+  ATTR_FULL_TITLES = state.data.meta?.attr_titles || {};
   /* ボタンの表記も上書き: short があればそれを、なければ label から短縮形を作る */
   document.querySelectorAll(".toggle button").forEach(b=>{
     const o = mm[b.dataset.metric];
