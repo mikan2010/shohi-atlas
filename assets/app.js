@@ -14,7 +14,9 @@ const METRICS = {
   info:          { label:"情報産業 (情報通信業の県内総生産)", unit:"兆円/年度", fmt:v=>v.toFixed(2) },
   grants:        { label:"財政移転 (地方交付税)", unit:"兆円/年度", fmt:v=>v.toFixed(2) },
   broadband:     { label:"情報回線 (FTTH契約数)", unit:"万契約", fmt:v=>d3.format(",.0f")(v) },
-  calls:         { label:"通話発信量 (携帯電話)", unit:"億回/年", fmt:v=>v.toFixed(1) }
+  calls:         { label:"通話発信量 (携帯電話)", unit:"億回/年", fmt:v=>v.toFixed(1) },
+  growth:        { label:"消費の伸び", unit:"%", fmt:v=>(v>0?"+":"")+v.toFixed(1) },
+  netmig:        { label:"人口純流入率", unit:"‰", fmt:v=>(v>0?"+":"")+v.toFixed(1) }
 };
 const ATTR_TITLES = { age:"世帯主の年齢階級", income:"年収階級",
                       household:"世帯類型", industry:"産業" };
@@ -30,6 +32,8 @@ const AI_SCALE = t => d3.interpolateRgbBasis(
 const DIV_SCALE = t => d3.interpolateRgbBasis(
   ["#A93A2C","#D08A79","#EFECE7","#7FA3CB","#132F5C"])(t);
 const NODATA = "#D3DAE0";
+
+let COMPANIES = null;  // data/companies.json (任意。EDINETスクリプトで生成)
 
 const state = {
   data: null,        // {meta:{years}, prefs:{code:{name, years:{y:{...}}}}}
@@ -227,7 +231,7 @@ function renderDetail(){
   const v = state.view;
   let html = `<div class="detail-name">${state.data.prefs[code].name}
       <small style="font-family:var(--mono);font-size:12px;color:var(--ink-soft)"> ${state.year}</small></div>`;
-  html += ["percap","percap_person","total","pop","netexp","info","grants","broadband","calls"].map(k=>{
+  html += ["percap","percap_person","total","pop","growth","netmig","netexp","info","grants","broadband","calls"].map(k=>{
     if(s[k]==null) return "";
     const m = METRICS[k];
     const saved = state.view; state.view = {type:"metric", key:k};
@@ -254,6 +258,23 @@ function renderDetail(){
           <div class="at"><div class="af ${isB?'hiB':''}" style="width:${val/max*100}%"></div></div>
           <span class="av">${val.toFixed(0)}</span></div>`;
       }).join("")}
+    </div>`;
+  }
+  /* 主要企業 (EDINET 由来。data/companies.json がある場合のみ) */
+  const comp = COMPANIES?.prefs?.[String(code)];
+  if(comp && comp.length){
+    const fmtSales = v => v >= 10000
+      ? (v/10000).toFixed(1)+"兆円" : d3.format(",.0f")(v)+"億円";
+    html += `<div class="attr-block">
+      <h3>主要企業 — 売上高上位 (上場企業)</h3>
+      ${comp.slice(0,10).map((r,i)=>`
+        <div class="attr-row" style="grid-template-columns:16px 1fr auto">
+          <span class="al">${i+1}</span>
+          <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</span>
+          <span class="av" style="white-space:nowrap">${fmtSales(r.sales)}</span>
+        </div>`).join("")}
+      <p class="detail-empty" style="margin-top:6px;font-size:11px">
+        ${COMPANIES.meta?.note||""}。本店所在地ベース。</p>
     </div>`;
   }
   body.innerHTML = html;
@@ -441,6 +462,8 @@ async function main(){
     setupYearSlider();
     populateAttrSelects();
     refresh();
+    fetch("data/companies.json").then(r=>r.ok?r.json():null)
+      .then(j=>{ if(j){ COMPANIES = j; renderDetail(); } }).catch(()=>{});
   }catch(e){
     document.getElementById("load-err").style.display = "block";
   }

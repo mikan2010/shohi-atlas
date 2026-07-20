@@ -43,6 +43,8 @@ STEPS = [
     ("世界: 家計消費 (World Bank API)",
      [sys.executable, "fetch_worldbank.py", "--years", "2013", "2018", "2023",
       "--out", "../data/world_data.json"], None),
+    ("派生指標: 伸び率・流入率・特化係数",
+     [sys.executable, "derive_insights.py"], None),
 ]
 
 
