@@ -343,7 +343,7 @@ def main():
         "years": years,
         "note": "出典: 全国家計構造調査 (e-Stat)。年齢属性は5歳階級を単純平均で集約",
         "metrics": {"percap": {"label": "1世帯当たり消費支出 (二人以上の世帯)",
-                               "unit": "万円/月", "digits": 1}},
+                               "short": "1世帯当たり", "unit": "万円/月", "digits": 1}},
         "attr_unit": "万円/月",
     }
     with open(OUT, "w", encoding="utf-8") as fp:

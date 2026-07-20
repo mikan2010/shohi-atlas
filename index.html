@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>都道府県別 消費マップ</title>
+<title>消費アトラス | 日本 — 都道府県別の消費データ地図</title>
+<meta name="description" content="政府統計 (e-Stat) をもとに、都道府県別の消費支出を属性・時系列で可視化した地図。">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
@@ -19,7 +21,7 @@
 
   <header>
     <div class="title-block">
-      <div class="eyebrow" id="eyebrow">Prefecture Consumption Map</div>
+      <div class="eyebrow" id="eyebrow">SHOHI ATLAS — JAPAN</div>
       <h1>都道府県別 消費マップ</h1>
     </div>
   </header>
@@ -30,10 +32,13 @@
   </div>
 
   <div class="controls">
-    <div class="toggle" role="group" aria-label="表示指標の切り替え">
+    <div class="attr-pick">
+      <span class="al">指標</span>
+      <div class="toggle" role="group" aria-label="表示指標の切り替え">
       <button data-metric="percap" aria-pressed="true">1人当たり</button>
       <button data-metric="total" aria-pressed="false">総額</button>
       <button data-metric="pop" aria-pressed="false">人口</button>
+      </div>
     </div>
     <div class="attr-pick" id="attr-pick" style="display:none">
       <span class="al">属性で見る</span>
@@ -79,7 +84,7 @@
     データ: <code>data/pref_data.json</code> (初期状態は構成確認用のサンプル値)。
     実データへの差し替えは <code>scripts/fetch_estat.py</code> で e-Stat API
     (家計調査・全国家計構造調査・県民経済計算) から生成できます。
-    地図: 国土数値情報ベースの都道府県境界 (簡略化済み)。
+    地図: 国土数値情報ベースの都道府県境界 (簡略化済み)。<br>消費アトラス — Shohi Atlas
   </footer>
 </div>
 <div class="tooltip" id="tooltip"></div>

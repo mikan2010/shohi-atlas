@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>国別 消費マップ</title>
+<title>消費アトラス | 世界 — 国別の消費データ地図</title>
+<meta name="description" content="World Bank Open Data をもとに、国別の家計消費を時系列で可視化した地図。">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
@@ -19,7 +21,7 @@
 
   <header>
     <div class="title-block">
-      <div class="eyebrow" id="eyebrow">Global Consumption Map</div>
+      <div class="eyebrow" id="eyebrow">SHOHI ATLAS — WORLD</div>
       <h1>国別 消費マップ</h1>
     </div>
   </header>
@@ -30,10 +32,13 @@
   </div>
 
   <div class="controls">
-    <div class="toggle" role="group" aria-label="表示指標の切り替え">
+    <div class="attr-pick">
+      <span class="al">指標</span>
+      <div class="toggle" role="group" aria-label="表示指標の切り替え">
       <button data-metric="percap" aria-pressed="true">1人当たり</button>
       <button data-metric="total" aria-pressed="false">総額</button>
       <button data-metric="pop" aria-pressed="false">人口</button>
+      </div>
     </div>
     <div class="year-ctl" id="year-ctl" style="display:none">
       <span class="yl">YEAR</span>
@@ -71,7 +76,7 @@
     データ: <code>data/world_data.json</code> (初期状態は主要国の構成確認用サンプル値)。
     実データへの差し替えは <code>scripts/fetch_worldbank.py</code> で World Bank Open Data API
     (家計最終消費支出) から生成できます。色は分布の偏りを考慮した対数スケールです。
-    地図: Natural Earth (world-atlas)。
+    地図: Natural Earth (world-atlas)。<br>消費アトラス — Shohi Atlas
   </footer>
 </div>
 <div class="tooltip" id="tooltip"></div>

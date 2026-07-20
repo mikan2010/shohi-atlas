@@ -208,7 +208,7 @@ async function main(){
     ]);
     state.data = raw;
     if(raw.meta?.note)
-      document.getElementById("eyebrow").textContent = "Global Consumption Map / " + raw.meta.note;
+      document.getElementById("eyebrow").textContent = "SHOHI ATLAS — WORLD / " + raw.meta.note;
     buildMap(topo);
     setupYearSlider();
     refresh();

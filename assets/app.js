@@ -195,7 +195,7 @@ function renderDetail(){
   }).join("");
 
   for(const [attrKey, breakdown] of Object.entries(s.attrs||{})){
-    const entries = Object.entries(breakdown);
+    const entries = sortCats(Object.keys(breakdown)).map(k=>[k, breakdown[k]]);
     const max = d3.max(entries, e=>e[1]);
     html += `<div class="attr-block">
       <h3>${ATTR_TITLES[attrKey]||attrKey}別 1人当たり消費 (${ATTR_UNIT})</h3>
@@ -245,6 +245,20 @@ const attrCat2Sel = document.getElementById("attr-cat2");
 const cmpChk = document.getElementById("cmp-chk");
 const attrPick = document.getElementById("attr-pick");
 
+/* 「29歳以下→30代→…→70歳以上」のように年齢として自然な順に並べる。
+ * 数値を含まないカテゴリは末尾に五十音順で置く */
+function catSortKey(name){
+  const m = String(name).match(/\d+/);
+  if(!m) return 1e9;
+  let n = +m[0];
+  if(/以下|未満/.test(name)) n -= 0.5;
+  return n;
+}
+function sortCats(cats){
+  return cats.slice().sort((x,y)=>
+    catSortKey(x)-catSortKey(y) || String(x).localeCompare(String(y),"ja"));
+}
+
 function availableAttrs(){
   const dims = {};
   for(const p of Object.values(state.data.prefs))
@@ -264,7 +278,7 @@ function populateAttrSelects(){
   const pd=attrDimSel.value, pc=attrCatSel.value, pc2=attrCat2Sel.value;
   attrDimSel.innerHTML = keys.map(k=>`<option value="${k}">${ATTR_TITLES[k]||k}</option>`).join("");
   if(keys.includes(pd)) attrDimSel.value = pd;
-  const cats = [...dims[attrDimSel.value]];
+  const cats = sortCats([...dims[attrDimSel.value]]);
   const opts = cats.map(c=>`<option value="${c}">${c}</option>`).join("");
   attrCatSel.innerHTML = opts;
   attrCat2Sel.innerHTML = opts;
@@ -338,6 +352,16 @@ function applyMetricOverrides(){
     if(o.digits!=null) METRICS[k].fmt = v=>v.toFixed(o.digits);
   }
   if(state.data.meta?.attr_unit) ATTR_UNIT = state.data.meta.attr_unit;
+  /* ボタンの表記も上書き: short があればそれを、なければ label から短縮形を作る */
+  document.querySelectorAll(".toggle button").forEach(b=>{
+    const o = mm[b.dataset.metric];
+    if(!o) return;
+    if(o.short) b.textContent = o.short;
+    else if(o.label){
+      const s = o.label.replace(/消費支出.*/, "");
+      if(s && s.length <= 8) b.textContent = s;
+    }
+  });
 }
 
 /* データが1件もない指標のボタンは隠す (例: quickstart は percap のみ提供) */
@@ -361,7 +385,7 @@ async function main(){
     pruneMetricButtons();
     if(state.data.meta?.note)
       document.getElementById("eyebrow").textContent =
-        "Prefecture Consumption Map / " + state.data.meta.note;
+        "SHOHI ATLAS — JAPAN / " + state.data.meta.note;
     buildMap(topo);
     setupYearSlider();
     populateAttrSelects();
