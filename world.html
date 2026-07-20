@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>国別 消費マップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <nav class="pagenav" aria-label="ページ切り替え">
+    <a href="index.html">日本</a>
+    <a class="on" href="world.html" aria-current="page">世界</a>
+  </nav>
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow" id="eyebrow">Global Consumption Map</div>
+      <h1>国別 消費マップ</h1>
+    </div>
+  </header>
+
+  <div class="err" id="load-err">
+    データファイルを読み込めませんでした。ローカルで開く場合はこのフォルダで
+    <code>python -m http.server</code> を実行し、<code>http://localhost:8000/world.html</code> を開いてください。
+  </div>
+
+  <div class="controls">
+    <div class="toggle" role="group" aria-label="表示指標の切り替え">
+      <button data-metric="percap" aria-pressed="true">1人当たり</button>
+      <button data-metric="total" aria-pressed="false">総額</button>
+      <button data-metric="pop" aria-pressed="false">人口</button>
+    </div>
+    <div class="year-ctl" id="year-ctl" style="display:none">
+      <span class="yl">YEAR</span>
+      <input type="range" id="year-slider" min="0" max="0" step="1" aria-label="年の選択">
+      <span class="yv" id="year-label"></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="map-card">
+      <svg id="map" viewBox="0 0 960 480" role="img" aria-label="国別コロプレスマップ"></svg>
+      <div class="legend">
+        <span class="lab" id="legend-min"></span>
+        <div class="bar" id="legend-bar"></div>
+        <span class="lab" id="legend-max"></span>
+        <span class="lab" id="legend-title" style="margin-left:auto"></span>
+      </div>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2>選択中の国</h2>
+        <div id="detail-body"><p class="detail-empty">地図上の国をクリックすると詳細を表示します。</p></div>
+      </div>
+      <div class="card">
+        <div class="h2row">
+          <h2 id="rank-title">ランキング TOP10</h2>
+          <button class="rank-toggle" id="rank-toggle" aria-pressed="false">全件表示</button>
+        </div>
+        <div id="rank-list" class="rank-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    データ: <code>data/world_data.json</code> (初期状態は主要国の構成確認用サンプル値)。
+    実データへの差し替えは <code>scripts/fetch_worldbank.py</code> で World Bank Open Data API
+    (家計最終消費支出) から生成できます。色は分布の偏りを考慮した対数スケールです。
+    地図: Natural Earth (world-atlas)。
+  </footer>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="assets/world.js"></script>
+</body>
+</html>

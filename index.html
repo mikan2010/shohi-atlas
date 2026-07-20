@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>都道府県別 消費マップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <nav class="pagenav" aria-label="ページ切り替え">
+    <a class="on" href="index.html" aria-current="page">日本</a>
+    <a href="world.html">世界</a>
+  </nav>
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow" id="eyebrow">Prefecture Consumption Map</div>
+      <h1>都道府県別 消費マップ</h1>
+    </div>
+  </header>
+
+  <div class="err" id="load-err">
+    データファイルを読み込めませんでした。ローカルで開く場合はこのフォルダで
+    <code>python -m http.server</code> を実行し、<code>http://localhost:8000/</code> を開いてください。
+  </div>
+
+  <div class="controls">
+    <div class="toggle" role="group" aria-label="表示指標の切り替え">
+      <button data-metric="percap" aria-pressed="true">1人当たり</button>
+      <button data-metric="total" aria-pressed="false">総額</button>
+      <button data-metric="pop" aria-pressed="false">人口</button>
+    </div>
+    <div class="attr-pick" id="attr-pick" style="display:none">
+      <span class="al">属性で見る</span>
+      <select id="attr-dim" aria-label="属性の種類"></select>
+      <select id="attr-cat" aria-label="属性のカテゴリ"></select>
+      <label class="cmp"><input type="checkbox" id="cmp-chk">2カテゴリ比較</label>
+      <span class="diff-sep" id="diff-sep" style="display:none">−</span>
+      <select id="attr-cat2" aria-label="比較するカテゴリ" style="display:none"></select>
+    </div>
+    <div class="year-ctl" id="year-ctl" style="display:none">
+      <span class="yl">YEAR</span>
+      <input type="range" id="year-slider" min="0" max="0" step="1" aria-label="年の選択">
+      <span class="yv" id="year-label"></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="map-card">
+      <svg id="map" viewBox="0 0 760 620" role="img" aria-label="都道府県別コロプレスマップ"></svg>
+      <div class="legend">
+        <span class="lab" id="legend-min"></span>
+        <div class="bar" id="legend-bar"></div>
+        <span class="lab" id="legend-max"></span>
+        <span class="lab" id="legend-title" style="margin-left:auto"></span>
+      </div>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2>選択中の都道府県</h2>
+        <div id="detail-body"><p class="detail-empty">地図上の都道府県をクリックすると詳細を表示します。</p></div>
+      </div>
+      <div class="card">
+        <div class="h2row">
+          <h2 id="rank-title">ランキング TOP10</h2>
+          <button class="rank-toggle" id="rank-toggle" aria-pressed="false">全件表示</button>
+        </div>
+        <div id="rank-list" class="rank-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer id="foot">
+    データ: <code>data/pref_data.json</code> (初期状態は構成確認用のサンプル値)。
+    実データへの差し替えは <code>scripts/fetch_estat.py</code> で e-Stat API
+    (家計調査・全国家計構造調査・県民経済計算) から生成できます。
+    地図: 国土数値情報ベースの都道府県境界 (簡略化済み)。
+  </footer>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="assets/app.js"></script>
+</body>
+</html>
