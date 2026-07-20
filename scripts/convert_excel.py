@@ -162,14 +162,14 @@ def sheet_pref(name, grid):
     return None
 
 
-def find_item_year_layout(grid):
-    """行=項目 / 列=年度 のレイアウトから「移出入」行と年度列を探す。
+def find_item_year_layout(grid, keyword="移出入"):
+    """行=項目 / 列=年度 のレイアウトから対象項目の行と年度列を探す。
     戻り値: (item_row, {year: col}) or (None, None)"""
     item_row, best = None, None
     for r, row in enumerate(grid[:200]):
         for cell in row[:4]:
             n = str(cell or "")
-            if "移出入" in n:
+            if keyword in n:
                 key = (0 if "純" in n else 1)
                 if best is None or key < best[0]:
                     best = (key, r)
@@ -188,8 +188,8 @@ def find_item_year_layout(grid):
     return (item_row, year_cols) if year_cols else (None, None)
 
 
-def write_netexp(pref_data, collected, targets, args):
-    """collected = {year: {pref: 兆円}} を pref_data に書き込む。"""
+def write_metric(pref_data, collected, targets, spec):
+    """collected = {year: {pref: 値}} を指標 spec で pref_data に書き込む。"""
     use = sorted(y for y in collected
                  if y in targets and len(collected[y]) >= 40)
     if not use:
@@ -197,14 +197,14 @@ def write_netexp(pref_data, collected, targets, args):
     hit = 0
     for y in use:
         for code, v in collected[y].items():
-            pref_data["prefs"][str(code)]["years"].setdefault(y, {})["netexp"] = v
+            pref_data["prefs"][str(code)]["years"].setdefault(y, {})[spec["metric"]] = v
             hit += 1
-    pref_data["meta"].setdefault("metrics", {})["netexp"] = {
-        "label": "域際収支 (財貨・サービスの移出入・純)",
-        "short": "域際収支", "unit": "兆円/年度", "digits": 2}
+    pref_data["meta"].setdefault("metrics", {})[spec["metric"]] = {
+        "label": spec["label"], "short": spec["short"],
+        "unit": spec["unit"], "digits": spec.get("digits", 2)}
     note = pref_data["meta"].get("note", "")
-    if "県民経済計算" not in note:
-        pref_data["meta"]["note"] = note + "。域際収支は県民経済計算 (年度)"
+    if spec["note_key"] not in note:
+        pref_data["meta"]["note"] = note + spec["note_add"]
     with open(PREF_OUT, "w", encoding="utf-8") as fp:
         json.dump(pref_data, fp, ensure_ascii=False, indent=1)
     missing = sorted(targets - set(use))
@@ -213,11 +213,16 @@ def write_netexp(pref_data, collected, targets, args):
         print(f"※ Excel に無かった年: {missing} (地図ではグレー表示)")
     smp = sorted(collected[use[-1]].items(), key=lambda x: -x[1])[:3]
     print("上位 (妥当性確認用):",
-          " / ".join(f"{PREF_NAMES[c]} {v:+.2f}兆円" for c, v in smp))
+          " / ".join(f"{PREF_NAMES[c]} {v:+.2f}{spec['unit'].split('/')[0]}" for c, v in smp))
     return True
 
 
-def cmd_kenmin(args):
+def cmd_item(args):
+    """県民経済計算系 Excel から任意の項目を指標として取り込む汎用コマンド。"""
+    spec = {"metric": args.metric, "label": args.label, "short": args.short,
+            "unit": args.unit, "digits": 2, "note_key": "県民経済計算",
+            "note_add": "。" + args.short + "は県民経済計算 (年度)"}
+    keyword = args.keyword
     if not os.path.exists(PREF_OUT):
         sys.exit(f"{PREF_OUT} がありません。先に quickstart_japan.py を実行してください。")
     with open(PREF_OUT, encoding="utf-8") as fp:
@@ -232,7 +237,7 @@ def cmd_kenmin(args):
         code = sheet_pref(name, grid)
         if code is None:
             continue
-        item_row, year_cols = find_item_year_layout(grid)
+        item_row, year_cols = find_item_year_layout(grid, keyword)
         if item_row is None:
             continue
         matched_sheets += 1
@@ -242,7 +247,7 @@ def cmd_kenmin(args):
                 collected.setdefault(y, {})[code] = round(v * args.scale, 3)
     if matched_sheets:
         print(f"都道府県別シート形式: {matched_sheets} シートから「移出入」を検出")
-        if write_netexp(pref_data, collected, targets, args):
+        if write_metric(pref_data, collected, targets, spec):
             return
         print("⚠ 対象年度と一致するデータが40都道府県分そろいませんでした。")
         print(f"  検出できた年度: {sorted(collected)[:10]}")
@@ -263,8 +268,8 @@ def cmd_kenmin(args):
         for r in range(first_pref_row):
             for c, cell in enumerate(grid[r]):
                 n = str(cell or "")
-                if "移出入" in n:
-                    key = (0 if "純" in n else 1)
+                if keyword in n:
+                    key = (0 if "純" in n else 1, len(n))
                     if best is None or key < best[0]:
                         best = (key, c, n)
         if best is None:
@@ -279,7 +284,7 @@ def cmd_kenmin(args):
         print("年度別シート形式で検出:")
         for nm, it in matched:
             print(f"  シート「{nm}」 列「{it[:40]}」")
-        if write_netexp(pref_data, collected, targets, args):
+        if write_metric(pref_data, collected, targets, spec):
             return
         print("⚠ 40都道府県分そろいませんでした。--sheet の指定をご検討ください。")
 
@@ -308,7 +313,7 @@ def cmd_kenmin(args):
                 v = to_num(grid[r][c] if c < len(grid[r]) else None)
                 if v is not None:
                     collected2.setdefault(y, {})[code] = round(v * args.scale, 3)
-        if write_netexp(pref_data, collected2, targets, args):
+        if write_metric(pref_data, collected2, targets, spec):
             return
     sys.exit("都道府県×年度の表を検出できませんでした。対象年度を含む Excel か、"
              "--sheet の指定をご確認ください。")
@@ -329,12 +334,27 @@ def main():
                    help="既存の物流データに年を追記する (既定は作り直し)")
     m.set_defaults(func=cmd_matrix)
 
-    k = sub.add_parser("kenmin", help="県民経済計算の移出入(純)を pref_data.json に統合")
-    k.add_argument("file")
-    k.add_argument("--years", nargs="*", help="取り込む年度 (未指定なら地図の年に合わせる)")
-    k.add_argument("--sheet", help="シート名 (未指定なら自動検出)")
-    k.add_argument("--scale", type=float, default=1e-6, help="兆円への換算 (既定: 百万円→兆円)")
-    k.set_defaults(func=cmd_kenmin)
+    def add_item_args(sp):
+        sp.add_argument("file")
+        sp.add_argument("--years", nargs="*", help="取り込む年度 (未指定なら地図の年に合わせる)")
+        sp.add_argument("--sheet", help="シート名 (未指定なら自動検出)")
+        sp.add_argument("--scale", type=float, default=1e-6,
+                        help="換算係数 (既定: 百万円→兆円)")
+
+    k = sub.add_parser("kenmin", help="域際収支 (移出入・純) を統合するプリセット")
+    add_item_args(k)
+    k.set_defaults(func=cmd_item, keyword="移出入", metric="netexp",
+                   label="域際収支 (財貨・サービスの移出入・純)",
+                   short="域際収支", unit="兆円/年度")
+
+    i = sub.add_parser("item", help="県民経済計算系Excelから任意の項目を指標として統合")
+    add_item_args(i)
+    i.add_argument("--keyword", required=True, help="列見出しに含まれる語 (例: 情報通信)")
+    i.add_argument("--metric", required=True, help="指標キー (例: info)")
+    i.add_argument("--label", required=True, help="表示ラベル")
+    i.add_argument("--short", required=True, help="ボタン用の短い名前")
+    i.add_argument("--unit", default="兆円/年度")
+    i.set_defaults(func=cmd_item)
 
     args = p.parse_args()
     args.func(args)
