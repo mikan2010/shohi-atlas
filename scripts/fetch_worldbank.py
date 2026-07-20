@@ -125,6 +125,7 @@ def main():
     print(f"1人当たりを {derived} 件導出")
 
     out = {"meta": {"years": sorted(years),
+                    "note": "出典: World Bank Open Data",
                     "source": "World Bank Open Data (NE.CON.PRVT.CD, SP.POP.TOTL)"},
            "countries": countries}
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)

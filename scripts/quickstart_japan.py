@@ -32,6 +32,15 @@ PERCAP_TABLES = {
     "2019": "0003424729",
     "2024": "0004040034",
 }
+# 総額推計用: 総世帯の平均消費支出 (単身世帯も含む平均。世帯数と掛けて総額を出す)
+ALLHH_TABLES = {
+    "2014": "0003424489",
+    "2019": "0003424745",
+    "2024": "0004040033",
+}
+# 都道府県別の総人口・世帯数: 社会・人口統計体系 (基礎データ A.人口・世帯)
+POP_TABLE = "0000010101"
+POP_TABLE_SEARCH = "社会・人口統計体系 都道府県データ 基礎データ 人口・世帯"
 AGE_SEARCH_WORD = "全国家計構造調査 都道府県 世帯主の年齢階級"
 # ユーザ検索で判明済みの正しい統計表 (収入と支出 × 世帯主の年齢階級)。最優先で試す
 KNOWN_AGE_TABLES = {"2019": ["0003424741"], "2024": ["0004040023"]}
@@ -210,15 +219,15 @@ def coarsen(attr_raw):
 
 
 # ---------------------------------------------------------------- 取得処理
-def store(out, code, year, val, attr_name=None, cat=None):
+def store(out, code, year, val, attr_name=None, cat=None, metric="percap"):
     p = out["prefs"][str(code)]["years"].setdefault(year, {})
     if attr_name:
         p.setdefault("attrs", {}).setdefault(attr_name, {})[cat] = val
     else:
-        p["percap"] = val
+        p[metric] = val
 
 
-def ingest(values, out, year, attr_dim=None, attr_labels=None):
+def ingest(values, out, year, attr_dim=None, attr_labels=None, metric="percap"):
     hit = 0
     attr_raw = {}
     for v in values:
@@ -238,7 +247,7 @@ def ingest(values, out, year, attr_dim=None, attr_labels=None):
         if attr_dim:
             attr_raw.setdefault(code, {})[cat] = val
         else:
-            store(out, code, year, val)
+            store(out, code, year, val, metric=metric)
         hit += 1
     if attr_dim and attr_raw:
         coarsened = coarsen(attr_raw)
@@ -265,7 +274,7 @@ def ingest(values, out, year, attr_dim=None, attr_labels=None):
     return hit
 
 
-def fetch_table(app_id, sid, out, year, attr_axis_keyword=None):
+def fetch_table(app_id, sid, out, year, attr_axis_keyword=None, metric="percap"):
     extra, tab_labels, attr_dim, attr_labels, axes = \
         build_filters(app_id, sid, attr_axis_keyword)
     values = get_values(app_id, sid, extra)
@@ -278,9 +287,70 @@ def fetch_table(app_id, sid, out, year, attr_axis_keyword=None):
         print("  ⚠ 金額系の表章項目を特定できませんでした。")
         dump_axes(axes)
         return 0
-    hit = ingest(picked, out, year, attr_dim, attr_labels)
+    hit = ingest(picked, out, year, attr_dim, attr_labels, metric=metric)
     print(f"  → {hit} 件取得")
     return hit
+
+
+# ---------------------------------------------------------------- 人口・世帯数
+def fetch_pop_households(app_id):
+    """社会・人口統計体系から都道府県別の総人口・世帯数を全年ぶん取得する。
+    戻り値: {year: {pref_code: {"pop": 人, "hh": 世帯}}}"""
+    sids = [POP_TABLE]
+    body = api_get("getStatsList", {"appId": app_id,
+                                    "searchWord": POP_TABLE_SEARCH, "limit": 5})
+    for t in as_list(body.get("GET_STATS_LIST", {})
+                     .get("DATALIST_INF", {}).get("TABLE_INF")):
+        if t.get("@id") and t.get("@id") not in sids:
+            sids.append(t.get("@id"))
+
+    for sid in sids[:3]:
+        try:
+            axes = get_axes(app_id, sid)
+        except SystemExit:
+            continue
+        # 指標軸 (総人口・世帯数を含む軸) を探す
+        for ax in axes:
+            dim = ax.get("@id")
+            if dim in ("area", "time"):
+                continue
+            classes = as_list(ax.get("CLASS"))
+            names = {c.get("@name", ""): c.get("@code") for c in classes}
+            pop_c = min((n for n in names if "総人口" in n and "率" not in n),
+                        key=len, default=None)
+            hh_c = min((n for n in names if "世帯数" in n and "率" not in n
+                        and "当たり" not in n), key=len, default=None)
+            if not (pop_c and hh_c):
+                continue
+            print(f"  [statsDataId {sid}] 総人口=「{pop_c}」 世帯数=「{hh_c}」")
+            extra = {f"cd{dim[0].upper()}{dim[1:]}": f"{names[pop_c]},{names[hh_c]}"}
+            values = get_values(app_id, sid, extra)
+            data = {}
+            for v in values:
+                code = pref_code_from_area(v.get("@area", ""))
+                raw = v.get("$")
+                if code is None or raw in (None, "", "-", "***", "X"):
+                    continue
+                year = str(v.get("@time", ""))[:4]
+                key = "pop" if v.get(f"@{dim}") == names[pop_c] else "hh"
+                try:
+                    data.setdefault(year, {}).setdefault(code, {})[key] = float(raw)
+                except ValueError:
+                    pass
+            if data:
+                print(f"  → {len(data)} 年ぶんの人口・世帯数を取得")
+                return data
+        print(f"  [statsDataId {sid}] 該当軸なし。次の候補を試します")
+    print("  ⚠ 人口・世帯数を取得できませんでした (総額・1人当たりの推計をスキップ)")
+    return {}
+
+
+def nearest_year(target, available):
+    """対象年のデータがなければ最も近い年で代用する。"""
+    if target in available:
+        return target
+    cands = sorted(available, key=lambda y: abs(int(y) - int(target)))
+    return cands[0] if cands else None
 
 
 def find_age_tables(app_id):
@@ -323,6 +393,13 @@ def main():
         print(f"\n■ {year}年 消費支出 (二人以上の世帯)")
         fetch_table(app_id, sid, out, year)
 
+    for year, sid in ALLHH_TABLES.items():
+        print(f"\n■ {year}年 消費支出 (総世帯, 総額推計用)")
+        fetch_table(app_id, sid, out, year, metric="percap_all")
+
+    print("\n■ 都道府県別の人口・世帯数 (社会・人口統計体系)")
+    popdata = fetch_pop_households(app_id)
+
     print("\n■ 世帯主の年齢階級別の統計表を検索中...")
     age_tables = find_age_tables(app_id)
     if not age_tables:
@@ -336,14 +413,43 @@ def main():
         else:
             print(f"  ⚠ {year}年の年齢階級別は取得できませんでした (属性なしで続行)")
 
+    # ---- 総額・1人当たり(人ベース)の推計 ----
+    est = 0
+    for code in PREF_NAMES:
+        for year, slot in out["prefs"][str(code)]["years"].items():
+            pa = slot.pop("percap_all", None) or slot.get("percap")
+            src_y = nearest_year(year, popdata.keys()) if popdata else None
+            ph = popdata.get(src_y, {}).get(code) if src_y else None
+            if pa is None or not ph or not ph.get("hh") or not ph.get("pop"):
+                continue
+            yearly = pa * ph["hh"] * 12          # 万円/年 (県全体)
+            slot["total"] = round(yearly / 1e8, 2)          # → 兆円/年
+            slot["percap_person"] = round(yearly / ph["pop"], 1)  # → 万円/年/人
+            slot["pop"] = round(ph["pop"] / 1e4)            # → 万人
+            est += 1
+    if est:
+        print(f"\n総額・1人当たり(人ベース)を {est} 件推計しました")
+        if popdata:
+            subs = {y: nearest_year(y, popdata.keys())
+                    for y in ["2014", "2019", "2024"]}
+            for t, u in subs.items():
+                if t != u:
+                    print(f"  ※ {t}年の推計には {u}年の人口・世帯数を使用")
+
     years = sorted({y for p in out["prefs"].values() for y in p["years"]})
     if not years:
         sys.exit("\n1件も取得できませんでした。上の診断出力を確認してください。")
     out["meta"] = {
         "years": years,
-        "note": "出典: 全国家計構造調査 (e-Stat)。年齢属性は5歳階級を単純平均で集約",
-        "metrics": {"percap": {"label": "1世帯当たり消費支出 (二人以上の世帯)",
-                               "short": "1世帯当たり", "unit": "万円/月", "digits": 1}},
+        "note": "出典: 全国家計構造調査ほか (e-Stat)。総額・1人当たりは総世帯平均×世帯数による推計",
+        "metrics": {
+            "percap": {"label": "1世帯当たり消費支出 (二人以上の世帯)",
+                       "short": "1世帯当たり", "unit": "万円/月", "digits": 1},
+            "percap_person": {"label": "1人当たり消費支出 (推計)",
+                              "short": "1人当たり", "unit": "万円/年", "digits": 1},
+            "total": {"label": "消費支出総額 (推計)",
+                      "short": "総額", "unit": "兆円/年", "digits": 2},
+            "pop": {"label": "人口", "unit": "万人", "digits": 0}},
         "attr_unit": "万円/月",
     }
     with open(OUT, "w", encoding="utf-8") as fp:
