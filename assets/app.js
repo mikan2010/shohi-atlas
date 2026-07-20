@@ -72,6 +72,32 @@ function viewMeta(){
            fmt:x=>(x>0?"+":"")+x.toFixed(0) };
 }
 
+function yearsWithData(){
+  return (state.data.meta.years||[]).filter(y=>
+    Object.values(state.data.prefs).some(p=>{
+      const s = p.years?.[y];
+      if(!s) return false;
+      const v = state.view;
+      if(v.type==="metric") return s[v.key]!=null;
+      const a = s.attrs?.[v.attr];
+      if(!a) return false;
+      if(v.type==="attr") return a[v.cat]!=null;
+      return a[v.catA]!=null && a[v.catB]!=null;
+    }));
+}
+
+/* 表示切り替え時、現在の年にデータがなければデータのある最新年へ移動する */
+function ensureYearHasData(){
+  const ys = yearsWithData();
+  if(!ys.length || ys.includes(state.year)) return;
+  state.year = ys[ys.length-1];
+  const years = state.data.meta.years;
+  const slider = document.getElementById("year-slider");
+  const label = document.getElementById("year-label");
+  if(slider && years.indexOf(state.year)>=0) slider.value = years.indexOf(state.year);
+  if(label) label.textContent = state.year;
+}
+
 function rankBy(code){
   const sorted = Object.keys(state.data.prefs).map(Number)
     .filter(c=>valueOf(c)!=null).sort((a,b)=>valueOf(b)-valueOf(a));
@@ -159,8 +185,11 @@ function renderRanking(){
   const list = d3.select("#rank-list").classed("full", state.rankAll);
   list.selectAll("*").remove();
   if(!rows.length){
+    const ys = yearsWithData();
     list.append("p").attr("class","detail-empty")
-        .text("この指標のデータがありません。scripts/fetch_estat.py で取得してください。");
+        .text(ys.length
+          ? `${state.year}年のデータはありません (この指標は ${ys.join("・")}年のデータがあります。年スライダーで切り替えてください)。`
+          : "この指標のデータがまだありません。scripts のスクリプトで取得できます。");
     return;
   }
   const max = isDiff ? Math.abs(valueOf(rows[0])) : valueOf(rows[0]);
@@ -299,6 +328,7 @@ function setMetricView(key){
   document.querySelectorAll(".toggle button").forEach(b=>
     b.setAttribute("aria-pressed", String(b.dataset.metric===key)));
   attrPick.classList.remove("active");
+  ensureYearHasData();
   refresh();
 }
 function setAttrView(){
@@ -310,6 +340,7 @@ function setAttrView(){
   state.view = compare
     ? {type:"diff", attr:attrDimSel.value, catA:attrCatSel.value, catB:attrCat2Sel.value}
     : {type:"attr", attr:attrDimSel.value, cat:attrCatSel.value};
+  ensureYearHasData();
   refresh();
 }
 
