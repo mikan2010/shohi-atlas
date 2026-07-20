@@ -294,8 +294,11 @@ def fetch_table(app_id, sid, out, year, attr_axis_keyword=None, metric="percap")
 
 # ---------------------------------------------------------------- 人口・世帯数
 def fetch_pop_households(app_id):
-    """社会・人口統計体系から都道府県別の総人口・世帯数を全年ぶん取得する。
-    戻り値: {year: {pref_code: {"pop": 人, "hh": 世帯}}}"""
+    """社会・人口統計体系から都道府県別の総人口と、世帯数の候補系列 (複数) を取得。
+    戻り値: (pops, hhs, names)
+      pops  = {year: {pref: 人口}}
+      hhs   = {系列コード: {year: {pref: 世帯数}}}
+      names = {系列コード: 系列名}"""
     sids = [POP_TABLE]
     body = api_get("getStatsList", {"appId": app_id,
                                     "searchWord": POP_TABLE_SEARCH, "limit": 5})
@@ -309,48 +312,97 @@ def fetch_pop_households(app_id):
             axes = get_axes(app_id, sid)
         except SystemExit:
             continue
-        # 指標軸 (総人口・世帯数を含む軸) を探す
         for ax in axes:
             dim = ax.get("@id")
             if dim in ("area", "time"):
                 continue
             classes = as_list(ax.get("CLASS"))
-            names = {c.get("@name", ""): c.get("@code") for c in classes}
-            pop_c = min((n for n in names if "総人口" in n and "率" not in n),
+            nmap = {c.get("@name", ""): c.get("@code") for c in classes}
+            pop_c = min((n for n in nmap if "総人口" in n and "率" not in n),
                         key=len, default=None)
-            hh_c = min((n for n in names if "世帯数" in n and "率" not in n
-                        and "当たり" not in n), key=len, default=None)
-            if not (pop_c and hh_c):
+            hh_cands = sorted((n for n in nmap if "世帯数" in n and "率" not in n
+                               and "当たり" not in n and "1世帯" not in n),
+                              key=len)[:3]
+            if not (pop_c and hh_cands):
                 continue
-            print(f"  [statsDataId {sid}] 総人口=「{pop_c}」 世帯数=「{hh_c}」")
-            extra = {f"cd{dim[0].upper()}{dim[1:]}": f"{names[pop_c]},{names[hh_c]}"}
+            print(f"  [statsDataId {sid}] 総人口=「{pop_c}」")
+            print(f"    世帯数の候補系列: {' / '.join(hh_cands)}")
+            codes = [nmap[pop_c]] + [nmap[n] for n in hh_cands]
+            extra = {f"cd{dim[0].upper()}{dim[1:]}": ",".join(codes)}
             values = get_values(app_id, sid, extra)
-            data = {}
+            pops, hhs = {}, {}
+            names = {nmap[n]: n for n in hh_cands}
             for v in values:
                 code = pref_code_from_area(v.get("@area", ""))
                 raw = v.get("$")
                 if code is None or raw in (None, "", "-", "***", "X"):
                     continue
                 year = str(v.get("@time", ""))[:4]
-                key = "pop" if v.get(f"@{dim}") == names[pop_c] else "hh"
+                series = v.get(f"@{dim}")
                 try:
-                    data.setdefault(year, {}).setdefault(code, {})[key] = float(raw)
+                    val = float(raw)
                 except ValueError:
-                    pass
-            if data:
-                print(f"  → {len(data)} 年ぶんの人口・世帯数を取得")
-                return data
+                    continue
+                if series == nmap[pop_c]:
+                    pops.setdefault(year, {})[code] = val
+                elif series in names:
+                    hhs.setdefault(series, {}).setdefault(year, {})[code] = val
+            if pops and hhs:
+                print(f"  → 人口 {len(pops)}年ぶん / 世帯数 {len(hhs)}系列を取得")
+                return pops, hhs, names
         print(f"  [statsDataId {sid}] 該当軸なし。次の候補を試します")
     print("  ⚠ 人口・世帯数を取得できませんでした (総額・1人当たりの推計をスキップ)")
-    return {}
+    return {}, {}, {}
+
+
+def is_juki(name):
+    return "住民基本台帳" in name or "住基" in name
+
+
+def pick_hh(target, hhs, names):
+    """対象年の世帯数を選ぶ。同年で47都道府県そろう系列 (住民基本台帳を優先) →
+    なければ最も近い年、の順。戻り値: (系列コード, 使用年) or (None, None)"""
+    exact = [c for c in hhs if len(hhs[c].get(target, {})) >= 40]
+    if exact:
+        exact.sort(key=lambda c: 0 if is_juki(names[c]) else 1)
+        return exact[0], target
+    best = None
+    for c in hhs:
+        for y, m in hhs[c].items():
+            if len(m) < 40:
+                continue
+            key = (abs(int(y) - int(target)), 0 if is_juki(names[c]) else 1)
+            if best is None or key < best[0]:
+                best = (key, c, y)
+    return (best[1], best[2]) if best else (None, None)
+
+
+def pick_pop(target, pops):
+    """対象年の人口年を選ぶ (同年→最も近い年)。"""
+    if len(pops.get(target, {})) >= 40:
+        return target
+    ys = [y for y in pops if len(pops[y]) >= 40]
+    return min(ys, key=lambda y: abs(int(y) - int(target))) if ys else None
 
 
 def nearest_year(target, available):
     """対象年のデータがなければ最も近い年で代用する。"""
+    available = list(available)
     if target in available:
         return target
     cands = sorted(available, key=lambda y: abs(int(y) - int(target)))
     return cands[0] if cands else None
+
+
+def complete_years(popdata):
+    """総人口と世帯数の両方が40都道府県以上でそろっている年だけを返す。
+    (世帯数は国勢調査ベースのため5年おきにしか存在しない)"""
+    ys = []
+    for y, m in popdata.items():
+        n = sum(1 for v in m.values() if v.get("pop") and v.get("hh"))
+        if n >= 40:
+            ys.append(y)
+    return sorted(ys)
 
 
 def find_age_tables(app_id):
@@ -398,7 +450,7 @@ def main():
         fetch_table(app_id, sid, out, year, metric="percap_all")
 
     print("\n■ 都道府県別の人口・世帯数 (社会・人口統計体系)")
-    popdata = fetch_pop_households(app_id)
+    pops, hhs, hnames = fetch_pop_households(app_id)
 
     print("\n■ 世帯主の年齢階級別の統計表を検索中...")
     age_tables = find_age_tables(app_id)
@@ -414,27 +466,37 @@ def main():
             print(f"  ⚠ {year}年の年齢階級別は取得できませんでした (属性なしで続行)")
 
     # ---- 総額・1人当たり(人ベース)の推計 ----
+    # 世帯数は同じ年の系列 (住民基本台帳ベースなど年次データ) を最優先し、
+    # なければ最も近い年 (国勢調査年など) で代用する
+    target_years = sorted({y for p in out["prefs"].values() for y in p["years"]})
+    choices = {}
+    if hhs:
+        print()
+        for year in target_years:
+            hc, hy = pick_hh(year, hhs, hnames)
+            py = pick_pop(year, pops)
+            choices[year] = (hc, hy, py)
+            if hc:
+                mark = "同年" if hy == year else f"{hy}年で代用"
+                print(f"  {year}年の推計: 世帯数=「{hnames[hc]}」({mark}) / 人口={py}年")
     est = 0
     for code in PREF_NAMES:
         for year, slot in out["prefs"][str(code)]["years"].items():
             pa = slot.pop("percap_all", None) or slot.get("percap")
-            src_y = nearest_year(year, popdata.keys()) if popdata else None
-            ph = popdata.get(src_y, {}).get(code) if src_y else None
-            if pa is None or not ph or not ph.get("hh") or not ph.get("pop"):
+            hc, hy, py = choices.get(year, (None, None, None))
+            hh = hhs.get(hc, {}).get(hy, {}).get(code) if hc else None
+            pop = pops.get(py, {}).get(code) if py else None
+            if pa is None or not hh or not pop:
                 continue
-            yearly = pa * ph["hh"] * 12          # 万円/年 (県全体)
-            slot["total"] = round(yearly / 1e8, 2)          # → 兆円/年
-            slot["percap_person"] = round(yearly / ph["pop"], 1)  # → 万円/年/人
-            slot["pop"] = round(ph["pop"] / 1e4)            # → 万人
+            yearly = pa * hh * 12                # 万円/年 (県全体)
+            slot["total"] = round(yearly / 1e8, 2)              # → 兆円/年
+            slot["percap_person"] = round(yearly / pop, 1)      # → 万円/年/人
+            slot["pop"] = round(pop / 1e4)                      # → 万人
             est += 1
     if est:
-        print(f"\n総額・1人当たり(人ベース)を {est} 件推計しました")
-        if popdata:
-            subs = {y: nearest_year(y, popdata.keys())
-                    for y in ["2014", "2019", "2024"]}
-            for t, u in subs.items():
-                if t != u:
-                    print(f"  ※ {t}年の推計には {u}年の人口・世帯数を使用")
+        print(f"総額・1人当たり(人ベース)を {est} 件推計しました")
+    else:
+        print("⚠ 総額・1人当たりの推計は0件でした (人口・世帯数の取得状況を確認してください)")
 
     years = sorted({y for p in out["prefs"].values() for y in p["years"]})
     if not years:
