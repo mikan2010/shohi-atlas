@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消費アトラス | 流れ — 都道府県間の人流・物流</title>
+<meta name="description" content="都道府県間の人の移動 (人流) と貨物の流動 (物流) を地図上のフローで可視化。">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <nav class="pagenav" aria-label="ページ切り替え">
+    <a href="index.html">日本</a>
+    <a href="world.html">世界</a>
+    <a class="on" href="flow.html" aria-current="page">流れ</a>
+  </nav>
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow" id="eyebrow">SHOHI ATLAS — FLOWS</div>
+      <h1>都道府県間の流れ</h1>
+    </div>
+  </header>
+
+  <div class="err" id="load-err">
+    データファイルを読み込めませんでした。ローカルで開く場合はこのフォルダで
+    <code>python -m http.server</code> を実行し、<code>http://localhost:8000/flow.html</code> を開いてください。
+  </div>
+
+  <div class="controls">
+    <div class="attr-pick">
+      <span class="al">流れの種類</span>
+      <div class="toggle" role="group" aria-label="流れの種類" id="mode-toggle"></div>
+    </div>
+    <div class="attr-pick">
+      <span class="al">向き</span>
+      <div class="toggle" role="group" aria-label="向きの切り替え">
+        <button data-dir="in" aria-pressed="false">流入</button>
+        <button data-dir="out" aria-pressed="false">流出</button>
+        <button data-dir="net" aria-pressed="true">純流入</button>
+      </div>
+    </div>
+    <div class="year-ctl" id="year-ctl" style="display:none">
+      <span class="yl">YEAR</span>
+      <input type="range" id="year-slider" min="0" max="0" step="1" aria-label="年の選択">
+      <span class="yv" id="year-label"></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="map-card">
+      <svg id="map" viewBox="0 0 760 620" role="img" aria-label="都道府県間フローマップ"></svg>
+      <div class="legend">
+        <span class="lab" id="legend-min"></span>
+        <div class="bar" id="legend-bar"></div>
+        <span class="lab" id="legend-max"></span>
+        <span class="lab" id="legend-title" style="margin-left:auto"></span>
+      </div>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2 id="detail-title">選択中の都道府県</h2>
+        <div id="detail-body"><p class="detail-empty">都道府県をクリックすると、その県を発着する流れを表示します。未選択時は全国の主要な流れを表示しています。</p></div>
+      </div>
+      <div class="card">
+        <div class="h2row">
+          <h2 id="rank-title">ランキング</h2>
+          <button class="rank-toggle" id="rank-toggle" aria-pressed="false">全件表示</button>
+        </div>
+        <div id="rank-list" class="rank-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    データ: <code>data/flow_data.json</code>。実データの生成は <code>scripts/fetch_flows.py</code> を参照
+    (人流: 住民基本台帳人口移動報告 / 物流: 貨物地域流動調査、いずれも e-Stat)。
+    地図: 国土数値情報ベースの都道府県境界 (簡略化済み)。<br>消費アトラス — Shohi Atlas
+  </footer>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="assets/flow.js"></script>
+</body>
+</html>

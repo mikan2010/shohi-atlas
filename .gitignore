@@ -1,4 +1,15 @@
+# Python
 __pycache__/
 *.pyc
+
+# ダウンロードした元データ (Excel はリポジトリに含めない)
+*.xlsx
+*.xls
+~$*
+
+# OS / エディタ
 .DS_Store
 Thumbs.db
+desktop.ini
+*.bak
+.vscode/

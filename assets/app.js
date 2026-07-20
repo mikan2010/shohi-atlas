@@ -9,7 +9,8 @@ const METRICS = {
   percap:        { label:"1人当たり消費支出", unit:"万円/年", fmt:v=>v.toFixed(0) },
   percap_person: { label:"1人当たり消費支出 (推計)", unit:"万円/年", fmt:v=>v.toFixed(1) },
   total:         { label:"消費支出総額",     unit:"兆円/年", fmt:v=>v.toFixed(2) },
-  pop:           { label:"人口",             unit:"万人",    fmt:v=>v.toFixed(0) }
+  pop:           { label:"人口",             unit:"万人",    fmt:v=>v.toFixed(0) },
+  netexp:        { label:"域際収支",         unit:"兆円/年度", fmt:v=>(v>0?"+":"")+v.toFixed(2) }
 };
 const ATTR_TITLES = { age:"世帯主の年齢階級", income:"年収階級", household:"世帯類型" };
 let ATTR_UNIT = "万円/年";
@@ -111,7 +112,8 @@ function refresh(){
   const vals = codes.map(valueOf).filter(v=>v!=null);
 
   let interp, ext;
-  if(state.view.type==="diff"){
+  const hasNeg = vals.length && d3.min(vals)<0 && d3.max(vals)>0;
+  if(state.view.type==="diff" || (state.view.type==="metric" && hasNeg)){
     const M = d3.max(vals, v=>Math.abs(v)) || 1;
     ext = [-M, M];
     interp = DIV_SCALE;
@@ -185,7 +187,7 @@ function renderDetail(){
   const v = state.view;
   let html = `<div class="detail-name">${state.data.prefs[code].name}
       <small style="font-family:var(--mono);font-size:12px;color:var(--ink-soft)"> ${state.year}</small></div>`;
-  html += ["percap","percap_person","total","pop"].map(k=>{
+  html += ["percap","percap_person","total","pop","netexp"].map(k=>{
     if(s[k]==null) return "";
     const m = METRICS[k];
     const saved = state.view; state.view = {type:"metric", key:k};
